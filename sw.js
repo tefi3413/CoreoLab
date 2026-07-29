@@ -1,11 +1,11 @@
-const CACHE = 'coreolab-v21';
+const CACHE = 'coreolab-v22';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './app.js',
   './logo.png',
-  './nombre.png'
+  './nombre.png',
   './manifest.webmanifest'
 ];
 
