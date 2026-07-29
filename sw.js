@@ -1,4 +1,4 @@
-const CACHE = 'coreolab-v22';
+const CACHE = 'coreolab-v23';
 const ASSETS = [
   './',
   './index.html',
