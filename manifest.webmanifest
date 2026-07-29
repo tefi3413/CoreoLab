@@ -1,0 +1,14 @@
+{
+  "name": "CoreoLab — Planificador de coreografías",
+  "short_name": "CoreoLab",
+  "description": "Planificá y reproducí coreografías sincronizadas con la música.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#090913",
+  "theme_color": "#090913" ,
+  "icons": [
+    { "src": "logo.png", "sizes": "1229x1229", "type": "image/png", "purpose": "any" }
+  ]
+}
+

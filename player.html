@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoreoLab — Reproductor</title>
+<style>
+  :root{ --bg:#090913; --text:#f1f5f9; --text2:#94a3b8; --accent:#7c3aed; --cyan:#06b6d4; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{ background:var(--bg); color:var(--text); font-family:'Inter',-apple-system,sans-serif;
+        min-height:100vh; display:flex; flex-direction:column; align-items:center; gap:10px; padding:14px; }
+  h1{ font-size:18px; font-weight:700; background:linear-gradient(135deg,#c4b5fd,#67e8f9);
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; text-align:center; }
+  .lbl{ font-size:10px; letter-spacing:.12em; color:#475569; text-transform:uppercase; }
+  #stage-wrap{ flex:1; width:100%; display:flex; align-items:center; justify-content:center; min-height:0; }
+  canvas{ border-radius:10px; box-shadow:0 0 0 1px rgba(255,255,255,.12),0 8px 40px rgba(0,0,0,.5); max-width:100%; }
+  #bar{ display:flex; align-items:center; gap:12px; width:100%; max-width:520px;
+        background:#16162a; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 14px; }
+  #play{ width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;color:#fff;font-size:16px;
+         background:var(--accent); flex-shrink:0; }
+  #track{ flex:1; height:6px; background:#26264a; border-radius:3px; overflow:hidden; cursor:pointer; }
+  #fill{ height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--cyan)); }
+  #time{ font-size:12px; color:var(--text2); font-variant-numeric:tabular-nums; }
+  #moment{ font-size:12px; color:var(--cyan); min-width:64px; }
+  .foot{ font-size:10px; color:#475569; }
+</style>
+</head>
+<body>
+  <h1 id="title">Coreografía</h1>
+  <div class="lbl">&#9660; Frente del escenario &#9660;</div>
+  <div id="stage-wrap"><canvas id="stage"></canvas></div>
+  <div class="lbl">&#9650; Fondo del escenario &#9650;</div>
+  <div id="bar">
+    <button id="play">&#9654;</button>
+    <div id="track"><div id="fill"></div></div>
+    <span id="time">0:00</span>
+    <span id="moment"></span>
+  </div>
+  <div class="foot">Hecho con CoreoLab</div>
+
+<script>
+/*__INJECT__*/
+const DEMO = {
+  name: 'Demostracion',
+  speedDefault: 2,
+  dancers: [{id:'a',name:'Ana',color:'#f97316'},{id:'b',name:'Beto',color:'#06b6d4'}],
+  moments: [
+    { id:'m1', name:'Inicio', timestamp:null, positions:{ a:{x:0.3,y:0.5}, b:{x:0.7,y:0.5} } },
+    { id:'m2', name:'Cruce',  timestamp:null, positions:{ a:{x:0.7,y:0.5}, b:{x:0.3,y:0.5} }, duration:2 }
+  ],
+  audio: null
+};
+const DATA = (window.COREO) ? window.COREO : DEMO;
+const DEF = DATA.speedDefault || 2;
+
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+
+function lerp(a,b,t){return a+(b-a)*t;}
+function dist(a,b){const dx=a.x-b.x,dy=a.y-b.y;return Math.sqrt(dx*dx+dy*dy);}
+function midpoint(a,b){return {x:(a.x+b.x)/2,y:(a.y+b.y)/2};}
+function quadAt(p0,c,p1,t){const mt=1-t;return {x:mt*mt*p0.x+2*mt*t*c.x+t*t*p1.x,y:mt*mt*p0.y+2*mt*t*c.y+t*t*p1.y};}
+function catmullRom(pts){
+  const seg=(p0,p1,p2,p3,t)=>{const t2=t*t,t3=t2*t;return{
+    x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+    y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3)};};
+  const N=pts.length,out=[];
+  for(let i=0;i<N-1;i++){const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||pts[i+1];
+    for(let s=0;s<16;s++)out.push(seg(p0,p1,p2,p3,s/16));}
+  out.push(pts[N-1]); return out;
+}
+function buildPathPoints(start,end,path){
+  if(!path) return [start,end];
+  if(path.type==='curve'){const c=path.c||midpoint(start,end);const out=[];for(let i=0;i<=24;i++)out.push(quadAt(start,c,end,i/24));return out;}
+  if(path.type==='via'){const p=path.pts||[];if(!p.length)return[start,end];return catmullRom([start,...p,end]);}
+  return [start,end];
+}
+function pointAtArcLength(poly,t){
+  if(!poly||poly.length<2)return (poly&&poly[0])||{x:.5,y:.5};
+  let total=0;const cum=[0];
+  for(let i=1;i<poly.length;i++){total+=dist(poly[i-1],poly[i]);cum.push(total);}
+  if(total===0)return poly[0];
+  const target=Math.max(0,Math.min(1,t))*total;
+  for(let i=1;i<poly.length;i++){if(cum[i]>=target){const sl=cum[i]-cum[i-1];const lt=sl>0?(target-cum[i-1])/sl:0;
+    return {x:lerp(poly[i-1].x,poly[i].x,lt),y:lerp(poly[i-1].y,poly[i].y,lt)};}}
+  return poly[poly.length-1];
+}
+function getFullPositions(idx){
+  const m=DATA.moments[idx]; if(!m) return {};
+  const pos={};
+  DATA.dancers.forEach(d=>{
+    if(m.positions[d.id]){pos[d.id]=m.positions[d.id];return;}
+    for(let i=idx-1;i>=0;i--){if(DATA.moments[i].positions[d.id]){pos[d.id]=DATA.moments[i].positions[d.id];return;}}
+    pos[d.id]={x:.5,y:.5};
+  });
+  return pos;
+}
+function momentDurSec(idx){const own=DATA.moments[idx]&&DATA.moments[idx].duration;return (own&&own>0)?own:DEF;}
+function straightPolys(fromPos,toPos){const o={};DATA.dancers.forEach(d=>{o[d.id]=[fromPos[d.id]||{x:.5,y:.5},toPos[d.id]||{x:.5,y:.5}];});return o;}
+function buildTransitionPaths(fromPos,toPos,toIdx){
+  const m=DATA.moments[toIdx];const paths=(m&&m.paths)||{};const o={};
+  DATA.dancers.forEach(d=>{const s=fromPos[d.id]||{x:.5,y:.5},e=toPos[d.id]||{x:.5,y:.5};o[d.id]=buildPathPoints(s,e,paths[d.id]);});
+  return o;
+}
+function positionsAlongPaths(polys,t){const o={};DATA.dancers.forEach(d=>{const p=polys&&polys[d.id];o[d.id]=p?pointAtArcLength(p,t):{x:.5,y:.5};});return o;}
+
+function computeSyncPositions(t){
+  const pins=[];DATA.moments.forEach((m,i)=>{if(m.timestamp!=null)pins.push({i,t:m.timestamp});});
+  pins.sort((a,b)=>a.t-b.t);
+  if(!pins.length)return null;
+  const hold=idx=>({activeIdx:idx,positions:getFullPositions(idx)});
+  if(t<pins[0].t)return hold(pins[0].i);
+  let k=0;for(let i=0;i<pins.length;i++){if(pins[i].t<=t)k=i;else break;}
+  if(k===0)return hold(pins[0].i);
+  const src=pins[k-1],dest=pins[k];
+  const nextT=(k+1<pins.length)?pins[k+1].t:Infinity;
+  const D=Math.min(momentDurSec(dest.i),nextT-dest.t);
+  const moveEnd=dest.t+D;
+  const fromPos=getFullPositions(src.i),toPos=getFullPositions(dest.i);
+  const adj=dest.i===src.i+1;
+  const polys=adj?buildTransitionPaths(fromPos,toPos,dest.i):straightPolys(fromPos,toPos);
+  if(t>=moveEnd)return {activeIdx:dest.i,positions:positionsAlongPaths(polys,1)};
+  const prog=D>0?(t-dest.t)/D:1;
+  return {activeIdx:dest.i,positions:positionsAlongPaths(polys,Math.max(0,Math.min(1,prog)))};
+}
+function seqTotal(){let s=0;for(let i=1;i<DATA.moments.length;i++)s+=momentDurSec(i);return s;}
+function computeSequential(t){
+  let acc=0;
+  for(let i=1;i<DATA.moments.length;i++){
+    const d=momentDurSec(i);
+    if(t<acc+d){
+      const fromPos=getFullPositions(i-1),toPos=getFullPositions(i);
+      const polys=buildTransitionPaths(fromPos,toPos,i);
+      const prog=d>0?(t-acc)/d:1;
+      return {activeIdx:i,positions:positionsAlongPaths(polys,Math.max(0,Math.min(1,prog)))};
+    }
+    acc+=d;
+  }
+  return {activeIdx:DATA.moments.length-1,positions:getFullPositions(DATA.moments.length-1)};
+}
+
+function drawBG(){
+  const w=canvas.width,h=canvas.height;
+  ctx.fillStyle='#111128';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.lineWidth=1;const step=w/10;
+  for(let x=step;x<w;x+=step){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+  for(let y=step;y<h;y+=step){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  ctx.font='bold '+Math.max(10,w*0.022)+'px Inter,sans-serif';ctx.textBaseline='top';ctx.textAlign='center';
+  for(let i=1;i<=9;i++){const lx=i*step;const label=String(Math.abs(i-5));const c=i===5;
+    ctx.fillStyle=c?'rgba(167,139,250,0.9)':'rgba(255,255,255,0.28)';ctx.fillText(label,lx,5);}
+  ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=1.5;ctx.setLineDash([4,6]);
+  ctx.beginPath();ctx.moveTo(w/2,0);ctx.lineTo(w/2,h);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke();ctx.setLineDash([]);
+  const g=ctx.createLinearGradient(0,h,0,0);g.addColorStop(0,'rgba(124,58,237,0.12)');g.addColorStop(1,'rgba(6,182,212,0.05)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+}
+function drawDancers(positions){
+  const R=Math.max(18,canvas.width*0.038);
+  DATA.dancers.forEach(d=>{
+    const pos=positions[d.id];if(!pos)return;
+    const x=pos.x*canvas.width,y=pos.y*canvas.height;
+    const grd=ctx.createRadialGradient(x,y,0,x,y,R*1.8);grd.addColorStop(0,d.color+'55');grd.addColorStop(1,'transparent');
+    ctx.fillStyle=grd;ctx.beginPath();ctx.arc(x,y,R*1.8,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=d.color;ctx.beginPath();ctx.arc(x,y,R,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.3)';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold '+(R*0.75)+'px Inter,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(d.name.charAt(0).toUpperCase(),x,y);
+    ctx.fillStyle='rgba(255,255,255,0.8)';ctx.font='500 '+(R*0.55)+'px Inter,sans-serif';ctx.fillText(d.name,x,y+R+10);
+  });
+}
+
+let lastT=0;
+function renderFrame(t){
+  lastT=t;
+  drawBG();
+  let r = hasAudio ? computeSyncPositions(t) : computeSequential(t);
+  if(!r) r = {activeIdx:0, positions:getFullPositions(0)};
+  drawDancers(r.positions);
+  const m=DATA.moments[r.activeIdx];
+  document.getElementById('moment').textContent = m ? ('M'+(r.activeIdx+1)+' \u00b7 '+m.name) : '';
+}
+
+const audioEl = DATA.audio ? new Audio(DATA.audio) : null;
+const hasAudio = !!audioEl;
+const playBtn=document.getElementById('play');
+const fill=document.getElementById('fill');
+const timeEl=document.getElementById('time');
+let playing=false, seqStart=0, rafId=0;
+
+function fmt(s){s=Math.max(0,Math.floor(s||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+function totalDur(){ return hasAudio ? (audioEl.duration||0) : seqTotal(); }
+
+function loop(){
+  let t;
+  if(hasAudio){ t=audioEl.currentTime; }
+  else { t=(performance.now()-seqStart)/1000; if(t>=seqTotal()){ t=seqTotal(); renderFrame(t); stop(); return; } }
+  renderFrame(t);
+  const tot=totalDur();
+  fill.style.width=(tot? (t/tot*100):0)+'%';
+  timeEl.textContent=fmt(t)+' / '+fmt(tot);
+  if(playing) rafId=requestAnimationFrame(loop);
+}
+function play(){
+  playing=true; playBtn.innerHTML='&#10073;&#10073;';
+  if(hasAudio){ audioEl.play(); } else { seqStart=performance.now(); }
+  loop();
+}
+function stop(){
+  playing=false; playBtn.innerHTML='&#9654;'; cancelAnimationFrame(rafId);
+  if(hasAudio) audioEl.pause();
+}
+playBtn.addEventListener('click',()=>{ playing?stop():play(); });
+if(hasAudio){ audioEl.addEventListener('ended',()=>{ stop(); audioEl.currentTime=0; renderFrame(0); }); }
+
+document.getElementById('track').addEventListener('click',e=>{
+  const tot=totalDur(); if(!tot)return;
+  const rect=e.currentTarget.getBoundingClientRect();
+  const frac=(e.clientX-rect.left)/rect.width;
+  if(hasAudio){ audioEl.currentTime=frac*tot; renderFrame(audioEl.currentTime); }
+});
+
+function resize(){
+  const wrap = document.getElementById('stage-wrap');
+  const r = wrap.getBoundingClientRect();
+  const size = Math.max(120, Math.min(r.width-8, r.height-8));
+  canvas.width = size; canvas.height = size;
+  renderFrame(lastT);
+}
+
+document.getElementById('title').textContent = DATA.name || 'Coreografia';
+window.addEventListener('resize', resize);
+resize();
+renderFrame(0);
+</script>
+</body>
+</html>

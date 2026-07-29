@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CoreoLab — Planificador de Coreografías</title>
+  <meta name="description" content="Herramienta visual para planificar cambios de posiciones en coreografías">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#090913">
+  <link rel="icon" href="logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="logo.png">
+ <meta name="apple-mobile-web-app-capable" content="yes">
+ <meta name="mobile-web-app-capable" content="yes">
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header id="app-header">
+    <div class="header-left">
+      <div class="logo"></div>
+    <div class="header-titles">
+      <img src="nombre.png" alt="CoreoLab" style="height:46px;width:auto;max-width:260px;display:block;object-fit:contain">
+      <span class="subtitle" id="header-subtitle"></span>
+  <h1 id="header-title" style="display:none"></h1>
+    </div>
+    </div>
+    <div id="header-center"></div>
+<div class="header-actions">
+      <button id="btn-back-lib" class="btn btn-ghost" style="display:none">← Biblioteca</button>
+	<button id="btn-undo" class="btn btn-ghost" style="display:none" title="Deshacer (Ctrl+Z)" disabled>↶ Deshacer</button>	
+      <button id="btn-save" class="btn btn-primary" style="display:none">💾 Guardar</button>
+      <button id="btn-export" class="btn btn-ghost" style="display:none">↓ Exportar</button>
+    </div>
+  </header>
+
+  <!-- MAIN: Dancers + Stage -->
+  <main id="app-main">
+    <!-- DANCERS PANEL -->
+    <aside id="dancer-panel">
+      <div class="panel-header">
+        <span class="panel-title">Bailarines</span>
+        <button id="btn-add-dancer" class="btn btn-icon" title="Agregar bailarín">+</button>
+      </div>
+      <div id="dancer-list"></div>
+    </aside>
+
+    <!-- STAGE -->
+    <section id="stage-section">
+      <div id="stage-moment-bar">
+        <span id="stage-moment-name">—</span>
+        <button id="stage-moment-edit" class="btn-icon-sm" title="Renombrar este momento">✎</button>
+      </div>
+      <div id="path-toolbar" style="display:none"></div>
+      <div class="stage-label stage-front">▼ FRENTE DEL ESCENARIO ▼</div>
+	<div id="zoom-controls">
+  <button id="zoom-out" class="btn-icon-sm" title="Alejar">−</button>
+  <span id="zoom-level">100%</span>
+  <button id="zoom-in" class="btn-icon-sm" title="Acercar">+</button>
+  <button id="zoom-reset" class="btn-icon-sm" title="Restablecer">⤢</button>
+</div>
+      <div id="stage-wrapper">
+        <canvas id="stage-canvas"></canvas>
+      </div>
+      <div class="stage-label stage-back">▲ FONDO DEL ESCENARIO ▲</div>
+    </section>
+  </main>
+
+  <!-- BOTTOM -->
+  <div id="app-bottom">
+    <div id="bottom-resizer" title="Arrastrá para ajustar la altura de esta sección"></div>
+    <!-- AUDIO -->
+    <div id="audio-section">
+      <div class="audio-bar">
+        <label for="audio-file-input" class="btn btn-ghost btn-sm" id="audio-load-btn">🎵 Cargar audio</label>
+        <input type="file" id="audio-file-input" accept="audio/*" style="display:none">
+        <button id="btn-audio-play" class="btn btn-round" disabled title="Reproducir / Pausar">▶</button>
+        <button id="btn-audio-stop" class="btn btn-icon-sm" disabled title="Detener">⏹</button>
+        <button id="btn-sync" class="btn btn-ghost btn-sm" title="Al reproducir, animar las formaciones sincronizadas con los pins de la música">🎵 Sync</button>
+        <div class="audio-time-display">
+          <span id="audio-current-time">0:00</span>
+          <span style="color:var(--text-muted)">/</span>
+          <span id="audio-total-time">0:00</span>
+        </div>
+        <span id="audio-filename" class="audio-filename">Sin audio cargado</span>
+        <div class="spacer"></div>
+        <span style="font-size:14px">🔊</span>
+        <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" style="width:70px">
+      </div>
+      <div id="waveform-wrap">
+        <canvas id="waveform-canvas"></canvas>
+        <div id="waveform-empty">Carga un archivo de audio para ver la forma de onda aquí</div>
+      </div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div id="timeline-section">
+      <div class="timeline-bar">
+        <span class="panel-title">Momentos</span>
+        <div class="tl-actions">
+          <label class="speed-label">Vel:</label>
+          <input type="range" id="speed-slider" min="0.5" max="6" step="0.5" value="2">
+          <span id="speed-value">2s</span>
+          <button id="btn-paths" class="btn btn-secondary" title="Editar recorridos de movimiento">🛤 Recorridos</button>
+          <button id="btn-animate" class="btn btn-accent" disabled title="Animar entre momentos">▶ Animar</button>
+          <button id="btn-add-moment" class="btn btn-secondary">+ Momento</button>
+        </div>
+      </div>
+      <div id="timeline-scroll">
+        <div id="timeline-moments"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIBRARY VIEW: Grupos + Coreografías -->
+  <div id="library-view">
+    <div class="lib-header">
+      <div class="lib-title-wrap">
+        <button id="lib-back" class="btn btn-icon" style="display:none" title="Volver a grupos">←</button>
+	<h2 id="lib-title"><img src="nombre.png" alt="CoreoLab" style="height:54px;width:auto;vertical-align:middle;margin-right:10px">Biblioteca</h2>
+      </div>
+      <div class="lib-header-actions">
+        <button id="lib-export" class="btn btn-ghost" title="Descargar copia de seguridad">↓ Backup</button>
+        <button id="lib-import" class="btn btn-ghost">↑ Importar</button>
+        <button id="lib-add" class="btn btn-primary">+ Nuevo grupo</button>
+      </div>
+    </div>
+    <div id="lib-body"></div>
+  </div>
+
+  <!-- MODAL: Add/Edit Dancer -->
+  <div id="modal-dancer" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h3 id="modal-dancer-title">Agregar bailarín</h3>
+      <div class="form-group">
+        <label>Nombre</label>
+        <input type="text" id="dancer-name-input" placeholder="Ej: Ana" maxlength="18" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Color</label>
+        <div id="color-picker-grid"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-cancel-dancer" class="btn btn-ghost">Cancelar</button>
+        <button id="btn-confirm-dancer" class="btn btn-primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Edit Moment Name -->
+  <div id="modal-moment" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h3>Editar momento</h3>
+      <div class="form-group">
+        <label>Nombre del momento</label>
+        <input type="text" id="moment-name-input" placeholder="Ej: Intro, Coro 1, Final..." maxlength="24" autocomplete="off">
+      </div>
+      <div class="modal-actions">
+        <button id="btn-cancel-moment" class="btn btn-ghost">Cancelar</button>
+        <button id="btn-confirm-moment" class="btn btn-primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Name (grupo / coreografía) -->
+  <div id="modal-name" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h3 id="modal-name-title">Nombre</h3>
+      <div class="form-group">
+        <label id="modal-name-label">Nombre</label>
+        <input type="text" id="modal-name-input" maxlength="40" autocomplete="off">
+      </div>
+      <div class="modal-actions">
+        <button id="btn-cancel-name" class="btn btn-ghost">Cancelar</button>
+        <button id="btn-confirm-name" class="btn btn-primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Confirm (borrado genérico) -->
+  <div id="modal-confirm" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <h3 id="confirm-title">¿Confirmar?</h3>
+      <p class="modal-desc" id="confirm-desc"></p>
+      <div class="modal-actions">
+        <button id="btn-cancel-confirm" class="btn btn-ghost">Cancelar</button>
+        <button id="btn-yes-confirm" class="btn btn-danger">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="import-file-input" accept=".json" style="display:none">
+
+  <script src="app.js"></script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+ </script>
+
+</body>
+</html>
