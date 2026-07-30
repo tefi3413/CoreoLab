@@ -608,6 +608,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.3)}
   .lib-header-actions {
     flex-wrap: wrap;
   }
+  #bottom-resizer {
+    display: none;
+  }
+  :root {
+    --bottom-h: auto !important;
+  }
   }
 
 /* Zoom del escenario */
