@@ -1301,12 +1301,14 @@ function downloadJSON(data, filename) {
 function exportChoreo() {
   if (!state.currentChoreo) return;
   const data = JSON.stringify({
+    tipo: 'coreo',                        // marca que es UNA coreo (no la biblioteca)
     name: state.currentChoreo.name,
     dancers: state.dancers,
     moments: state.moments
   }, null, 2);
   downloadJSON(data, `${state.currentFolder.name}-${state.currentChoreo.name}.json`);
 }
+
 function exportLibrary() {
   downloadJSON(JSON.stringify({ folders: library.folders, nextId }, null, 2), 'choreo-biblioteca.json');
 }
@@ -1322,7 +1324,9 @@ function remapFolder(f) {
     moments: (c.moments || []).map(m => {
       const positions = {};
       Object.keys(m.positions || {}).forEach(k => { const nk = dmap[k]; if (nk) positions[nk] = m.positions[k]; });
-      return { id: uid(), name: m.name, timestamp: (m.timestamp != null ? m.timestamp : null), positions };
+	    const paths = {};
+      Object.keys(m.paths || {}).forEach(k => { const nk = dmap[k]; if (nk) paths[nk] = m.paths[k]; });
+    return { id: uid(), name: m.name, timestamp: (m.timestamp != null ? m.timestamp : null), duration: m.duration, positions, paths };
     })
   }));
   return { id: uid(), name: f.name || 'Grupo importado', dancers, choreos, createdAt: Date.now() };
@@ -1332,11 +1336,20 @@ function importLibraryFile(file) {
   reader.onload = e => {
     try {
       const data = JSON.parse(e.target.result);
-      const folders = data.folders
-        ? data.folders
-        : [{ name: data.name || 'Grupo importado', dancers: data.dancers || [],
-             choreos: [{ name: data.name || 'Coreografía importada', moments: data.moments || [] }] }];
-      folders.forEach(f => library.folders.push(remapFolder(f)));
+      if (data.tipo === 'coreo') {
+        const folderLike = {
+          name: data.name || 'Coreo importada',
+          dancers: data.dancers || [],
+          choreos: [{ name: data.name || 'Coreografía', moments: data.moments || [] }]
+        };
+        library.folders.push(remapFolder(folderLike));
+      } else {
+        const folders = data.folders
+          ? data.folders
+          : [{ name: data.name || 'Grupo importado', dancers: data.dancers || [],
+               choreos: [{ name: data.name || 'Coreografía importada', moments: data.moments || [] }] }];
+        folders.forEach(f => library.folders.push(remapFolder(f)));
+      }
       persistLibrary();
       goToFolders();
       toast('Importado ✓');
@@ -1833,34 +1846,12 @@ document.getElementById('zoom-out').addEventListener('click',  () => setZoom(sta
 document.getElementById('zoom-reset').addEventListener('click',() => setZoom(1));
 
 // ── Compartir una coreo como reproductor autónomo ──
+
+// — Compartir una coreo = generar su video MP4 —
 async function shareChoreo(folder, choreo) {
-  // 1) Junto los datos de la coreo
-  const data = {
-    name: choreo.name,
-    speedDefault: parseFloat(document.getElementById('speed-slider').value) || 2,
-    dancers: folder.dancers,
-    moments: choreo.moments,
-    audio: null
-  };
-
-  // 2) Si tiene música guardada, la convierto a texto (base64) para incrustarla
-  try {
-    const bytes = await idbGet('audio:' + choreo.id);
-    if (bytes) {
-      data.audio = 'data:audio/mpeg;base64,' + arrayBufferToBase64(bytes);
-    }
-  } catch (_) {}
-
-  // 3) Agarro la plantilla del reproductor y le inyecto los datos en el hueco
-  const template = await fetch('player.html').then(r => r.text());
-  const json = JSON.stringify(data).replace(/</g, '\\u003c'); // evita romper el <script>
-  const html = template.replace('/*__INJECT__*/', 'window.COREO = ' + json + ';');
-
-  // 4) Descargo el archivo .html listo para compartir
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-  a.download = choreo.name.replace(/[\/\\:*?"<>|]/g, '_') + '.html';
-  a.click();
+  openChoreo(folder, choreo);                       // carga la coreo en el editor
+  await new Promise(res => setTimeout(res, 600));   // espera a que cargue el audio
+  exportChoreoVideo();
 }
 
 // Convierte los bytes del audio a texto base64 (por partes, para que no se cuelgue)
@@ -2089,4 +2080,35 @@ function drawFrameTo(g, size, positions) {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(d.name.charAt(0).toUpperCase(), x, y);
   });
+}
+// Copiar la coreo actual como texto (para pasarla a otro dispositivo)
+function copiarCoreoActual() {
+  if (!state.currentChoreo) { alert('Abrí una coreo primero.'); return; }
+  const data = JSON.stringify({
+    tipo: 'coreo',
+    name: state.currentChoreo.name,
+    dancers: state.dancers,
+    moments: state.moments
+  });
+  navigator.clipboard.writeText(data)
+    .then(() => toast('Coreo copiada ✓ Pegala en el otro dispositivo'))
+    .catch(() => prompt('Copiá este texto (Ctrl+C):', data));
+}
+
+// Pegar una coreo copiada (la crea como grupo nuevo)
+function pegarCoreo() {
+  const txt = prompt('Pegá acá la coreo que copiaste:');
+  if (!txt) return;
+  try {
+    const data = JSON.parse(txt.trim());
+    const folderLike = {
+      name: data.name || 'Coreo pegada',
+      dancers: data.dancers || [],
+      choreos: [{ name: data.name || 'Coreografía', moments: data.moments || [] }]
+    };
+    library.folders.push(remapFolder(folderLike));
+    persistLibrary();
+    goToFolders();
+    toast('Coreo pegada ✓');
+  } catch (_) { alert('El texto pegado no es una coreo válida.'); }
 }

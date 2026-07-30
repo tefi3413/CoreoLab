@@ -34,6 +34,7 @@
 	<button id="btn-undo" class="btn btn-ghost" style="display:none" title="Deshacer (Ctrl+Z)" disabled>↶ Deshacer</button>	
       <button id="btn-save" class="btn btn-primary" style="display:none">💾 Guardar</button>
       <button id="btn-export" class="btn btn-ghost" style="display:none">↓ Exportar</button>
+      <button class="btn btn-ghost" onclick="copiarCoreoActual()">📋 Copiar</button>
     </div>
   </header>
 
@@ -125,6 +126,7 @@
       <div class="lib-header-actions">
         <button id="lib-export" class="btn btn-ghost" title="Descargar copia de seguridad">↓ Backup</button>
         <button id="lib-import" class="btn btn-ghost">↑ Importar</button>
+	<button class="btn btn-ghost" onclick="pegarCoreo()">📋 Pegar</button>
         <button id="lib-add" class="btn btn-primary">+ Nuevo grupo</button>
       </div>
     </div>
