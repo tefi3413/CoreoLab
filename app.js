@@ -1919,3 +1919,174 @@ document.addEventListener('keydown', e => {
     undo();
   }
 });
+
+//Botón MP4 para compartir video universal
+async function exportChoreoVideo() {
+  if (!state.currentChoreo || state.moments.length < 2) {
+    alert('Abrí una coreo con al menos 2 momentos.'); return;
+  }
+  const hasAudio = !!(state.audio && state.audio.buffer);
+  const hasPins  = state.moments.some(m => m.timestamp != null);
+  const useSync  = hasAudio && hasPins;
+  try {
+    const { Muxer, ArrayBufferTarget } = await import('https://cdn.jsdelivr.net/npm/mp4-muxer/+esm');
+    const size = 720, fps = 30;
+    const ab = useSync ? state.audio.buffer : null;
+
+    // ¿este navegador puede fabricar audio AAC?
+    let withAudio = false;
+    if (useSync) {
+      try {
+        withAudio = (await AudioEncoder.isConfigSupported({
+          codec: 'mp4a.40.2', sampleRate: ab.sampleRate, numberOfChannels: ab.numberOfChannels, bitrate: 128000
+        })).supported;
+      } catch (_) { withAudio = false; }
+    }
+
+    let totalSec;
+    if (useSync) totalSec = ab.duration;
+    else { totalSec = 0; for (let i = 1; i < state.moments.length; i++) totalSec += momentDurSec(i); }
+    const totalFrames = Math.ceil(totalSec * fps);
+
+    const c = document.createElement('canvas'); c.width = size; c.height = size;
+    const vctx = c.getContext('2d');
+
+    const opts = {
+      target: new ArrayBufferTarget(),
+      video: { codec: 'avc', width: size, height: size },
+      fastStart: 'in-memory'
+    };
+    if (withAudio) opts.audio = { codec: 'aac', numberOfChannels: ab.numberOfChannels, sampleRate: ab.sampleRate };
+    const muxer = new Muxer(opts);
+
+    const venc = new VideoEncoder({
+      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      error: e => console.error('video encoder:', e)
+    });
+    venc.configure({ codec: 'avc1.4d0028', width: size, height: size, bitrate: 5000000, framerate: fps });
+
+    if (withAudio) {
+      const aenc = new AudioEncoder({
+        output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+        error: e => console.error('audio encoder:', e)
+      });
+      aenc.configure({ codec: 'mp4a.40.2', sampleRate: ab.sampleRate, numberOfChannels: ab.numberOfChannels, bitrate: 128000 });
+      const sr = ab.sampleRate, ch = ab.numberOfChannels, len = ab.length;
+      for (let off = 0; off < len; off += sr) {
+        const n = Math.min(sr, len - off);
+        const data = new Float32Array(n * ch);
+        for (let cc = 0; cc < ch; cc++) data.set(ab.getChannelData(cc).subarray(off, off + n), cc * n);
+        const adata = new AudioData({
+          format: 'f32-planar', sampleRate: sr, numberOfFrames: n, numberOfChannels: ch,
+          timestamp: Math.round((off / sr) * 1e6), data
+        });
+        aenc.encode(adata); adata.close();
+      }
+      await aenc.flush();
+    }
+
+    for (let f = 0; f < totalFrames; f++) {
+      const t = f / fps;
+      const r = useSync ? computeSyncPositions(t) : computeSequential(t);
+      const positions = (r && r.positions) ? r.positions : getFullPositions(0);
+      drawFrameTo(vctx, size, positions);
+      const frame = new VideoFrame(c, { timestamp: Math.round((f * 1e6) / fps), duration: Math.round(1e6 / fps) });
+      while (venc.encodeQueueSize > 30) await new Promise(res => setTimeout(res, 1));
+      venc.encode(frame, { keyFrame: f % 60 === 0 });
+      frame.close();
+    }
+
+    await venc.flush();
+    muxer.finalize();
+    const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = state.currentChoreo.name.replace(/[\/\\:*?"<>|]/g, '_') + '.mp4';
+    a.click();
+    console.log('✓ video generado (' + totalFrames + ' cuadros, ' + totalSec.toFixed(1) + 's, audio: ' + withAudio + ')');
+    if (useSync && !withAudio) {
+      alert('El video se generó SIN sonido, porque este navegador (Chrome en Linux) no puede crear audio AAC.\n\nDesde un iPhone, Android, Windows o Mac, el mismo botón lo genera CON música.');
+    }
+  } catch (e) {
+    console.error('FALLÓ el video:', e);
+    alert('Falló: ' + e.message);
+  }
+}
+
+// Anima los momentos en secuencia por sus duraciones (sin depender de pins) — para el video
+function computeSequential(t) {
+  let acc = 0;
+  for (let i = 1; i < state.moments.length; i++) {
+    const d = momentDurSec(i);
+    if (t < acc + d) {
+      const fromPos = getFullPositions(i - 1), toPos = getFullPositions(i);
+      const polys = buildTransitionPaths(fromPos, toPos, i);
+      const prog = d > 0 ? (t - acc) / d : 1;
+      return { activeIdx: i, positions: positionsAlongPaths(polys, Math.max(0, Math.min(1, prog))) };
+    }
+    acc += d;
+  }
+  return { activeIdx: state.moments.length - 1, positions: getFullPositions(state.moments.length - 1) };
+}
+
+/// Dibuja el escenario completo (grilla, números, frente/fondo) + bailarines, para el video
+function drawFrameTo(g, size, positions) {
+  // Fondo
+  g.fillStyle = '#111128'; g.fillRect(0, 0, size, size);
+
+  // Margen de arriba y abajo para las etiquetas FRENTE / FONDO
+  const pad = Math.round(size * 0.07);
+  const top = pad, bottom = size - pad, area = bottom - top;
+
+  // Grilla (dentro del área del escenario)
+  g.strokeStyle = 'rgba(255,255,255,0.05)'; g.lineWidth = 1;
+  const step = size / 10;
+  for (let x = step; x < size; x += step) { g.beginPath(); g.moveTo(x, top); g.lineTo(x, bottom); g.stroke(); }
+  for (let i = 1; i < 10; i++) { const y = top + (area / 10) * i; g.beginPath(); g.moveTo(0, y); g.lineTo(size, y); g.stroke(); }
+
+  // Líneas del centro (cruz punteada)
+  g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 1.5; g.setLineDash([4, 6]);
+  g.beginPath(); g.moveTo(size / 2, top); g.lineTo(size / 2, bottom); g.stroke();
+  g.beginPath(); g.moveTo(0, top + area / 2); g.lineTo(size, top + area / 2); g.stroke();
+  g.setLineDash([]);
+
+  // Números de columna: 4 3 2 1 0 1 2 3 4 (el 0 al centro)
+  g.font = 'bold ' + Math.round(size * 0.028) + 'px Inter,sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = 1; i <= 9; i++) {
+    const lx = i * step, label = String(Math.abs(i - 5)), center = i === 5;
+    g.fillStyle = center ? 'rgba(167,139,250,0.95)' : 'rgba(255,255,255,0.4)';
+    g.fillText(label, lx, top + Math.round(size * 0.03));
+  }
+
+  // Etiquetas de frente y fondo
+  g.font = '600 ' + Math.round(size * 0.022) + 'px Inter,sans-serif';
+  g.fillStyle = 'rgba(148,163,184,0.9)';
+  g.fillText('▼ FRENTE DEL ESCENARIO ▼', size / 2, top / 2);
+  g.fillText('▲ FONDO DEL ESCENARIO ▲', size / 2, bottom + top / 2);
+
+// Cruces de referencia: fondo (30%), centro (50%), frente (70%) sobre la línea del medio
+  const cx = size / 2;
+  const arm = Math.max(6, size * 0.016);
+  g.strokeStyle = 'rgba(255,220,80,0.80)';
+  g.lineWidth = 1.8; g.lineCap = 'round';
+  [0.30, 0.50, 0.70].forEach(frac => {
+    const y = top + area * frac;
+    g.beginPath(); g.moveTo(cx - arm, y - arm); g.lineTo(cx + arm, y + arm); g.stroke();
+    g.beginPath(); g.moveTo(cx + arm, y - arm); g.lineTo(cx - arm, y + arm); g.stroke();
+  });
+  g.lineCap = 'butt';
+
+  // Bailarines (sus posiciones van dentro del área del escenario)
+  const R = Math.max(18, size * 0.038);
+  state.dancers.forEach(d => {
+    const p = positions[d.id]; if (!p) return;
+    const x = p.x * size, y = top + p.y * area;
+    g.fillStyle = d.color;
+    g.beginPath(); g.arc(x, y, R, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.3)'; g.lineWidth = 2; g.stroke();
+    g.fillStyle = '#fff'; g.font = 'bold ' + (R * 0.75) + 'px Inter,sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(d.name.charAt(0).toUpperCase(), x, y);
+  });
+}
