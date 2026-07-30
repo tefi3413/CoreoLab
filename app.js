@@ -1511,7 +1511,7 @@ window.addEventListener('resize', () => { resizeCanvas(); resizeWaveform(); });
   let resizing = false;
   const onMove = e => {
     if (!resizing) return;
-    const y = (e.touches ? e.touches[0].clientY : e.clientY);
+    const y = e.clientY;
     const h = window.innerHeight - y;
     const clamped = Math.max(150, Math.min(window.innerHeight * 0.75, h));
     document.body.style.setProperty('--bottom-h', clamped + 'px');
@@ -1525,11 +1525,8 @@ window.addEventListener('resize', () => { resizeCanvas(); resizeWaveform(); });
   };
   const start = e => { resizing = true; document.body.style.userSelect = 'none'; e.preventDefault(); };
   resizer.addEventListener('pointerdown', start);
-  resizer.addEventListener('touchstart', start, { passive: false });
   window.addEventListener('pointermove', onMove);
-  window.addEventListener('touchmove', onMove, { passive: false });
   window.addEventListener('pointerup', stop);
-  window.addEventListener('touchend', stop);
 })();
 
 // ============================================================
