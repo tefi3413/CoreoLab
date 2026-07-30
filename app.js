@@ -2097,10 +2097,23 @@ function copiarCoreoActual() {
 
 // Pegar una coreo copiada (la crea como grupo nuevo)
 function pegarCoreo() {
-  const txt = prompt('Pegá acá la coreo que copiaste:');
-  if (!txt) return;
+  navigator.clipboard.readText().then(txt => {
+    procesarCoreoPegada(txt);
+  }).catch(() => {
+    const txt = prompt('Pegá acá la coreo (mantené presionado → Pegar):');
+    if (txt) procesarCoreoPegada(txt);
+  });
+}
+
+function procesarCoreoPegada(txt) {
   try {
-    const data = JSON.parse(txt.trim());
+    let limpio = (txt || '').trim()
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'");
+    const ini = limpio.indexOf('{');
+    const fin = limpio.lastIndexOf('}');
+    if (ini >= 0 && fin >= 0) limpio = limpio.slice(ini, fin + 1);
+    const data = JSON.parse(limpio);
     const folderLike = {
       name: data.name || 'Coreo pegada',
       dancers: data.dancers || [],
@@ -2110,5 +2123,7 @@ function pegarCoreo() {
     persistLibrary();
     goToFolders();
     toast('Coreo pegada ✓');
-  } catch (_) { alert('El texto pegado no es una coreo válida.'); }
+  } catch (_) {
+    alert('El texto pegado no es una coreo válida.');
+  }
 }
