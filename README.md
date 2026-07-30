@@ -8,8 +8,6 @@
 
 ---
 
-<!-- Tip: Podés guardar una captura o GIF de la app en tu repo como screenshot.png y reemplazar esta imagen -->
-![Demo de CoreoLab]<img width="2558" height="896" alt="image" src="https://github.com/user-attachments/assets/f0980d00-0b92-419a-82e6-d24537012c15" />
 <img width="800" height="337" alt="ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/3c001dbb-25f6-43cd-9720-5a3b334c63c8" />
 
 
