@@ -10,6 +10,8 @@
 
 <!-- Tip: Podés guardar una captura o GIF de la app en tu repo como screenshot.png y reemplazar esta imagen -->
 ![Demo de CoreoLab]<img width="2558" height="896" alt="image" src="https://github.com/user-attachments/assets/f0980d00-0b92-419a-82e6-d24537012c15" />
+[Prueba.webm](https://github.com/user-attachments/assets/4fd72c7e-5322-48b9-9d56-e3a90e72f7c5)
+
 
 
 ## 📌 Tabla de contenidos
