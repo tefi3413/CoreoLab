@@ -1523,7 +1523,10 @@ window.addEventListener('resize', () => { resizeCanvas(); resizeWaveform(); });
     document.body.style.userSelect = '';
     localStorage.setItem('choreo-bottom-h', getComputedStyle(document.body).getPropertyValue('--bottom-h').trim());
   };
-  const start = e => { resizing = true; document.body.style.userSelect = 'none'; e.preventDefault(); };
+const start = e => {
+    if (window.innerWidth <= 640) return;   // en el celu, no permitir arrastrar
+    resizing = true; document.body.style.userSelect = 'none'; e.preventDefault();
+  };
   resizer.addEventListener('pointerdown', start);
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', stop);
