@@ -611,9 +611,9 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.3)}
   #bottom-resizer {
     display: none;
   }
-  :root {
-    --bottom-h: auto !important;
-  }
+  body {
+    --bottom-h: 35vh !important;
+    grid-template-rows: 54px 1fr 40vh !important;
   }
 
 /* Zoom del escenario */
@@ -628,4 +628,5 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.3)}
 
 #bottom-resizer {
   touch-action: none;
+  
 }
