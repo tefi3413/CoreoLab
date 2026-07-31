@@ -67,7 +67,7 @@ function setZoom(z) {
 function resizeCanvas() {
   const wrap = document.getElementById('stage-wrapper');
   const r    = wrap.getBoundingClientRect();
-  const esCelu = window.innerWidth <= 640;
+  const esCelu = window.matchMedia('(max-width: 640px)').matches;
   const size = esCelu
     ? (r.width - 16)                          // en el celu: usar todo el ancho
     : Math.min(r.width - 20, r.height - 10);  // en la compu: como antes
@@ -146,7 +146,7 @@ function drawCenterMarkers(ctx, w, h) {
 }
 
 function drawDancers(positions) {
-	 const esCelu = window.innerWidth <= 640;
+	 const esCelu = window.matchMedia('(max-width: 640px)').matches;
   const R = Math.max(esCelu ? 10 : 18, canvas.width * (esCelu ? 0.030 : 0.038));
   state.dancers.forEach(d => {
     const pos = positions[d.id];
@@ -1528,7 +1528,7 @@ window.addEventListener('resize', () => { resizeCanvas(); resizeWaveform(); });
     localStorage.setItem('choreo-bottom-h', getComputedStyle(document.body).getPropertyValue('--bottom-h').trim());
   };
 const start = e => {
-    if (window.innerWidth <= 640) return;   // en el celu, no permitir arrastrar
+    if (window.matchMedia('(max-width: 640px)').matches) return;   // en el celu, no permitir arrastrar
     resizing = true; document.body.style.userSelect = 'none'; e.preventDefault();
   };
   resizer.addEventListener('pointerdown', start);
