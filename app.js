@@ -68,6 +68,10 @@ function resizeCanvas() {
   const wrap = document.getElementById('stage-wrapper');
   const r    = wrap.getBoundingClientRect();
   const size = Math.min(r.width - 20, r.height - 10);
+  const esCelu = window.innerWidth <= 640;
+  const size = esCelu
+    ? (r.width - 16)                          // en el celu: usar todo el ancho
+    : Math.min(r.width - 20, r.height - 10);  // en la compu: como antes
   canvas.width  = size;
   canvas.height = size;
   drawStage();
