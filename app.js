@@ -146,7 +146,8 @@ function drawCenterMarkers(ctx, w, h) {
 }
 
 function drawDancers(positions) {
-  const R = Math.max(18, canvas.width * 0.038);
+	 const esCelu = window.innerWidth <= 640;
+  const R = Math.max(esCelu ? 10 : 18, canvas.width * (esCelu ? 0.030 : 0.038));
   state.dancers.forEach(d => {
     const pos = positions[d.id];
     if (!pos) return;
