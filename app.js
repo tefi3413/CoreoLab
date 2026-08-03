@@ -69,7 +69,7 @@ function resizeCanvas() {
   const r    = wrap.getBoundingClientRect();
   const esCelu = window.matchMedia('(max-width: 640px)').matches;
   const size = esCelu
-    ? (r.width - 16)                          // en el celu: usar todo el ancho
+    ? Math.min(r.width - 16, window.innerHeight * 0.42)
     : Math.min(r.width - 20, r.height - 10);  // en la compu: como antes
   canvas.width  = size;
   canvas.height = size;
